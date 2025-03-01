@@ -7,10 +7,10 @@ import {Dialog} from "primereact/dialog";
 import {Badge} from "primereact/badge";
 import {InputTextarea} from "primereact/inputtextarea";
 import {FloatLabel} from "primereact/floatlabel";
+import {IconField} from 'primereact/iconfield';
+import {InputIcon} from 'primereact/inputicon';
 import TaskService from "./services/TaskService";
-import RestService from "./services/RestService";
-import {Toast} from "primereact/toast"; // Importa o Toast
-
+import {Toast} from "primereact/toast";
 import "primereact/resources/themes/lara-light-blue/theme.css";
 import "primereact/resources/primereact.min.css";
 import "primeicons/primeicons.css";
@@ -40,17 +40,29 @@ const FooterContentAdd = ({
             icon="pi pi-times"
             onClick={() => {
                 onClose();
-                toast.current.show({severity: "warn", detail: "Ação cancelada."}); // Exibe o Toast de cancelamento
+                toast.current.show({severity: "warn", detail: "Ação cancelada."});
             }}
             className="p-button-text"
         />
         <Button
             label="Adicionar"
             icon="pi pi-check"
-            onClick={() => {
-                const newTaskId = new Date().getTime(); // Gerando um ID único
-                TaskService.handleCreateTask(newTaskId, taskName, taskDescription, setTasks, setVisible);
-                toast.current.show({severity: "success", detail: "Tarefa adicionada com sucesso!"});
+            onClick={async () => {
+                const newTask = {
+                    title_task: taskName,
+                    description_task: taskDescription,
+                    status_task: taskStatus,
+                };
+
+                try {
+                    const createdTask = await TaskService.postTask(newTask); // Espera a criação da tarefa
+                    console.log('Nova tarefa criada:', createdTask); // Verifica o objeto retornado
+                    setTasks((prevTasks) => [...prevTasks, createdTask]); // Atualiza a lista de tarefas com a nova tarefa
+                    toast.current.show({severity: "success", detail: "Tarefa adicionada com sucesso!"});
+                    setVisible(false); // Fecha o Dialog
+                } catch (error) {
+                    toast.current.show({severity: "error", detail: "Erro ao adicionar a tarefa"});
+                }
             }}
             autoFocus
         />
@@ -58,23 +70,28 @@ const FooterContentAdd = ({
 );
 
 // Componente Footer do Dialog Editar
-const FooterContentEdit = ({onClose, taskName, taskDescription, taskId, setTasks, setVisible, toast}) => (
+const FooterContentEdit = ({onClose, taskName, taskDescription, taskId, taskStatus, setTasks, setVisible, toast}) => (
     <div>
         <Button
             label="Não"
             icon="pi pi-times"
             onClick={() => {
                 onClose();
-                toast.current.show({severity: "warn", detail: "Ação cancelada."}); // Exibe o Toast de cancelamento
+                toast.current.show({severity: "warn", detail: "Ação cancelada."});
             }}
             className="p-button-text"
         />
         <Button
             label="Atualizar"
             icon="pi pi-check"
-            onClick={() => {
-                TaskService.handleUpdateTask(taskId, taskName, taskDescription, setTasks, setVisible);
-                toast.current.show({severity: "success", detail: "Tarefa atualizada com sucesso!"});
+            onClick={async () => {
+                // Passando também o status para a atualização da tarefa
+                try {
+                    await TaskService.handleUpdateTask(taskId, taskName, taskDescription, taskStatus, setTasks, setVisible);
+                    toast.current.show({severity: "success", detail: "Tarefa atualizada com sucesso!"});
+                } catch (error) {
+                    toast.current.show({severity: "error", detail: "Erro ao atualizar a tarefa"});
+                }
             }}
             autoFocus
         />
@@ -82,23 +99,22 @@ const FooterContentEdit = ({onClose, taskName, taskDescription, taskId, setTasks
 );
 
 export default function MyApp() {
-    const [visibleAdd, setVisibleAdd] = useState(false); // Estado para o Dialog Adicionar
-    const [visibleEdit, setVisibleEdit] = useState(false); // Estado para o Dialog Editar
+    const [visibleAdd, setVisibleAdd] = useState(false);
+    const [visibleEdit, setVisibleEdit] = useState(false);
+    const [searchId, setSearchId] = useState('')
     const [taskName, setTaskName] = useState('');
     const [tasks, setTasks] = useState([]);
     const [taskDescription, setTaskDescription] = useState('');
-    const [taskId, setTaskId] = useState(null); // Para armazenar o ID da tarefa no modo de edição
-
-    const [taskStatus, setTaskStatus] = useState(null); // Estado para armazenar o status da tarefa
-
-    const toast = useRef(null); // Referência ao Toast
+    const [taskId, setTaskId] = useState(null);
+    const [taskStatus, setTaskStatus] = useState(null);
+    const toast = useRef(null);
 
     // Buscar tarefas ao montar o componente
     useEffect(() => {
         const fetchTasks = async () => {
             try {
-                const tasks = await TaskService.getTasks();  // Ensure this matches your TaskService export
-                console.log(tasks);
+                const tasks = await TaskService.getTasks();
+                setTasks(tasks.registros); // Atualiza o estado com a lista de tarefas
             } catch (error) {
                 console.error('Erro ao buscar tarefas:', error);
             }
@@ -113,42 +129,88 @@ export default function MyApp() {
             return <Badge value="Sem status" severity="secondary"/>;
         }
 
-        let severity = "secondary"; // Padrão (cinza)
-        const status = rowData.status_task.toUpperCase(); // Garante compatibilidade com o enum
+        let severity = "secondary";
+        const status = rowData.status_task.toUpperCase();
 
         if (status === "PENDING") {
-            severity = "warning"; // Amarelo
+            severity = "warning";
         } else if (status === "COMPLETED") {
-            severity = "success"; // Verde
+            severity = "success";
         } else if (status === "IN_PROGRESS") {
-            severity = "info"; // Azul
+            severity = "info";
         } else if (status === "CANCELED") {
-            severity = "danger"; // Vermelho
+            severity = "danger";
         }
 
         return <Badge value={rowData.status_task} severity={severity}/>;
     };
 
-    const handleEdit = (task) => {
+    const handleEdit = async (task) => {
         setTaskId(task.id_task);
         setTaskName(task.title_task);
         setTaskDescription(task.description_task);
-        setTaskStatus(task.status_task); // Seta o status da tarefa ao editar
-        setVisibleEdit(true); // Abre o Dialog de Edição
+        setTaskStatus(task.status_task);
+        setVisibleEdit(true);
     };
 
-    const handleDelete = (taskId) => {
-        setTasks(tasks.filter((task) => task.id_task !== taskId));
+    const handleDelete = async (taskId) => {
+        try {
+            // Chama o serviço de delete
+            await TaskService.deleteTask(taskId);
+
+            // Atualiza o estado para remover a tarefa
+            setTasks(tasks.filter((task) => task.id_task !== taskId));
+
+            // Exibe o Toast de sucesso
+            toast.current.show({severity: 'success', detail: 'Tarefa excluída com sucesso!'});
+        } catch (error) {
+            toast.current.show({severity: 'error', detail: 'Erro ao excluir tarefa'});
+        }
     };
 
     return (
         <div className="p-4">
-            {/* Botão para adicionar nova tarefa */}
             <div className="card flex justify-content-center">
                 <Button label="Adicionar nova tarefa" icon="pi pi-plus" onClick={() => setVisibleAdd(true)}/>
             </div>
 
-            {/* Dialog Adicionar */}
+            <div className="flex gap-2">
+                <IconField iconPosition="left">
+                    <InputIcon className="pi pi-search"> </InputIcon>
+                    <InputText
+                        placeholder="Informe o ID da tarefa"
+                        value={searchId}
+                        onChange={(e) => setSearchId(e.target.value)}
+                    />
+                </IconField>
+                <Button
+                    label="Buscar"
+                    icon="pi pi-search"
+                    onClick={async () => {
+                        if (searchId.trim() === '') {
+                            toast.current.show({severity: 'warn', detail: 'Por favor, insira um ID válido.'});
+                            return;
+                        }
+
+                        try {
+                            const task = await TaskService.findTaskById(searchId);
+                            if (task) {
+                                // Aqui você pode fazer algo, como exibir a tarefa encontrada
+                                toast.current.show({
+                                    severity: 'success',
+                                    detail: `Tarefa encontrada: ${task.title_task}`
+                                });
+                                setTasks([task]); // Exemplo: exibe apenas a tarefa encontrada
+                            } else {
+                                toast.current.show({severity: 'error', detail: 'Tarefa não encontrada.'});
+                            }
+                        } catch (error) {
+                            toast.current.show({severity: 'error', detail: 'Erro ao buscar tarefa.'});
+                        }
+                    }}
+                />
+            </div>
+
             <Dialog
                 header="Adicionar tarefa"
                 visible={visibleAdd}
@@ -161,9 +223,10 @@ export default function MyApp() {
                     taskStatus={taskStatus}
                     setTaskStatus={setTaskStatus}
                     setVisible={setVisibleAdd}
-                    toast={toast} // Passa o toast para o Footer
+                    toast={toast}
                 />}
             >
+
                 <div className="card flex justify-content-center flex-column p-4 gap-5">
                     <FloatLabel>
                         <InputText id="name" value={taskName} onChange={(e) => setTaskName(e.target.value)}/>
@@ -183,19 +246,19 @@ export default function MyApp() {
                 </div>
             </Dialog>
 
-            {/* Dialog Editar */}
             <Dialog
                 header="Editar tarefa"
                 visible={visibleEdit}
                 onHide={() => setVisibleEdit(false)}
                 footer={<FooterContentEdit
                     onClose={() => setVisibleEdit(false)}
+                    taskId={taskId}
                     taskName={taskName}
                     taskDescription={taskDescription}
-                    taskId={taskId}
+                    taskStatus={taskStatus}
                     setTasks={setTasks}
                     setVisible={setVisibleEdit}
-                    toast={toast} // Passa o toast para o Footer
+                    toast={toast}
                 />}
             >
                 <div className="card flex justify-content-center flex-column p-4 gap-5">
@@ -223,25 +286,33 @@ export default function MyApp() {
                 </div>
             </Dialog>
 
-            {/* Data Table */}
             <DataTable value={tasks} removableSort paginator rows={6} className="mt-4"
                        emptyMessage="Nenhuma tarefa disponível">
-                <Column field="id_task" header="ID" sortable style={{width: "30%"}}/>
-                <Column field="title_task" header="Nome" sortable style={{width: "30%"}}/>
-                <Column field="description_task" header="Descrição" sortable style={{width: "40%"}}/>
-                <Column field="status_task" header="Status" body={statusBodyTemplate} style={{width: "15%"}}/>
+                <Column field="id_task" header="ID" sortable style={{width: "5%"}}/>
+                <Column field="title_task" header="Nome" sortable style={{width: "5%"}}/>
+                <Column field="description_task" header="Descrição" sortable style={{width: "10%"}}/>
+                <Column field="status_task" header="Status" body={statusBodyTemplate} style={{width: "5%"}}/>
+                <Column field="data_task" header="Data de criação" sortable style={{width: "10%"}}/>
+                <Column field="data_modificacao_task" header="Data da última modificação" sortable
+                        style={{width: "10%"}}/>
                 <Column
+                    header="Opções"
                     body={(rowData) => (
                         <div className="flex gap-2 justify-end">
                             <Button icon="pi pi-pencil" severity="success" onClick={() => handleEdit(rowData)}/>
-                            <Button icon="pi pi-trash" severity="danger" onClick={() => handleDelete(rowData.id_task)}/>
+                            <Button
+                                icon="pi pi-trash"
+                                severity="danger"
+                                onClick={() => handleDelete(rowData.id_task)}
+                            />
                         </div>
                     )}
-                    style={{width: "15%"}}
+                    style={{width: "10%"}}
+
                 />
             </DataTable>
 
-            <Toast ref={toast}/> {/* Coloca o Toast aqui */}
+            <Toast ref={toast}/>
         </div>
     );
 }
