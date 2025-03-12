@@ -70,6 +70,16 @@ class TaskService {
             console.error("Erro ao atualizar a tarefa", error);
         }
     }
+
+    async findTaskById(taskId) {
+        try {
+            const response = await this.api.get(`/tasks/find/${taskId}`);
+            return response.data; // Retorna a tarefa encontrada
+        } catch (error) {
+            console.error("Erro ao buscar tarefa por ID", error);
+            throw error;
+        }
+    }
 }
 
 export default new TaskService();

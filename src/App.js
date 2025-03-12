@@ -7,6 +7,8 @@ import {Dialog} from "primereact/dialog";
 import {Badge} from "primereact/badge";
 import {InputTextarea} from "primereact/inputtextarea";
 import {FloatLabel} from "primereact/floatlabel";
+import {IconField} from 'primereact/iconfield';
+import {InputIcon} from 'primereact/inputicon';
 import TaskService from "./services/TaskService";
 import {Toast} from "primereact/toast";
 import "primereact/resources/themes/lara-light-blue/theme.css";
@@ -99,6 +101,7 @@ const FooterContentEdit = ({onClose, taskName, taskDescription, taskId, taskStat
 export default function MyApp() {
     const [visibleAdd, setVisibleAdd] = useState(false);
     const [visibleEdit, setVisibleEdit] = useState(false);
+    const [searchId, setSearchId] = useState('')
     const [taskName, setTaskName] = useState('');
     const [tasks, setTasks] = useState([]);
     const [taskDescription, setTaskDescription] = useState('');
@@ -171,6 +174,43 @@ export default function MyApp() {
                 <Button label="Adicionar nova tarefa" icon="pi pi-plus" onClick={() => setVisibleAdd(true)}/>
             </div>
 
+            <div className="flex gap-2">
+                <IconField iconPosition="left">
+                    <InputIcon className="pi pi-search"> </InputIcon>
+                    <InputText
+                        placeholder="Informe o ID da tarefa"
+                        value={searchId}
+                        onChange={(e) => setSearchId(e.target.value)}
+                    />
+                </IconField>
+                <Button
+                    label="Buscar"
+                    icon="pi pi-search"
+                    onClick={async () => {
+                        if (searchId.trim() === '') {
+                            toast.current.show({severity: 'warn', detail: 'Por favor, insira um ID válido.'});
+                            return;
+                        }
+
+                        try {
+                            const task = await TaskService.findTaskById(searchId);
+                            if (task) {
+                                // Aqui você pode fazer algo, como exibir a tarefa encontrada
+                                toast.current.show({
+                                    severity: 'success',
+                                    detail: `Tarefa encontrada: ${task.title_task}`
+                                });
+                                setTasks([task]); // Exemplo: exibe apenas a tarefa encontrada
+                            } else {
+                                toast.current.show({severity: 'error', detail: 'Tarefa não encontrada.'});
+                            }
+                        } catch (error) {
+                            toast.current.show({severity: 'error', detail: 'Erro ao buscar tarefa.'});
+                        }
+                    }}
+                />
+            </div>
+
             <Dialog
                 header="Adicionar tarefa"
                 visible={visibleAdd}
@@ -186,6 +226,7 @@ export default function MyApp() {
                     toast={toast}
                 />}
             >
+
                 <div className="card flex justify-content-center flex-column p-4 gap-5">
                     <FloatLabel>
                         <InputText id="name" value={taskName} onChange={(e) => setTaskName(e.target.value)}/>
@@ -247,11 +288,15 @@ export default function MyApp() {
 
             <DataTable value={tasks} removableSort paginator rows={6} className="mt-4"
                        emptyMessage="Nenhuma tarefa disponível">
-                <Column field="id_task" header="ID" sortable style={{width: "30%"}}/>
-                <Column field="title_task" header="Nome" sortable style={{width: "30%"}}/>
-                <Column field="description_task" header="Descrição" sortable style={{width: "40%"}}/>
-                <Column field="status_task" header="Status" body={statusBodyTemplate} style={{width: "15%"}}/>
+                <Column field="id_task" header="ID" sortable style={{width: "5%"}}/>
+                <Column field="title_task" header="Nome" sortable style={{width: "5%"}}/>
+                <Column field="description_task" header="Descrição" sortable style={{width: "10%"}}/>
+                <Column field="status_task" header="Status" body={statusBodyTemplate} style={{width: "5%"}}/>
+                <Column field="data_task" header="Data de criação" sortable style={{width: "10%"}}/>
+                <Column field="data_modificacao_task" header="Data da última modificação" sortable
+                        style={{width: "10%"}}/>
                 <Column
+                    header="Opções"
                     body={(rowData) => (
                         <div className="flex gap-2 justify-end">
                             <Button icon="pi pi-pencil" severity="success" onClick={() => handleEdit(rowData)}/>
@@ -262,7 +307,8 @@ export default function MyApp() {
                             />
                         </div>
                     )}
-                    style={{width: "15%"}}
+                    style={{width: "10%"}}
+
                 />
             </DataTable>
 
